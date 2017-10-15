@@ -24,7 +24,7 @@ float BesselJ0(float x)
 }
 
 __global__ void
-besselKernel(const float *X, const float *Y, int numElements)
+besselKernel(const float *X, float *Y, int numElements)
 {
     int i = blockDim.x * blockIdx.x + threadIdx.x;
 
