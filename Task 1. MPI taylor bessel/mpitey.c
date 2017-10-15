@@ -5,9 +5,9 @@
 #include <math.h>
 #include <cstdlib>
 
-#define MPI_ROOT_PROCESS 0	//id главного процесса
+#define MPI_ROOT_PROCESS 0		//id главного процесса
 #define A 0 				//начало интервала
-#define B 1					//конец интервала
+#define B 1				//конец интервала
 #define step 0.1			//шаг по х  0.1 0.00001; 
 
 double factorial(double f) {
@@ -109,7 +109,7 @@ int main(int argc, char* argv[])
 		MPI_Scatter(offsetArray,1,MPI_INT,&offsetArray[0],1,MPI_INT,MPI_ROOT_PROCESS,MPI_COMM_WORLD);
 
 		/////////////////Тем временем ROOT PROCESS тоже считает свою часть/////////////////////////////
-
+		
 		int pointCount = sendArray[0];
 		int offsetVal = offsetArray[0];
 
@@ -134,9 +134,9 @@ int main(int argc, char* argv[])
 		//////////////////////////////////////////////////////
 
 		//Теперь принимаем данные
-		MPI_Gather(approxValues,sendArray[0],MPI_DOUBLE,approxValues,sendArray[0],MPI_DOUBLE,MPI_ROOT_PROCESS,MPI_COMM_WORLD);
+		MPI_Gatherv(approxValues,sendArray[0],MPI_DOUBLE,approxValues,sendArray,offsetArray,MPI_DOUBLE,MPI_ROOT_PROCESS,MPI_COMM_WORLD);
 		//Выводим всё в консоль	
-		//ResultToConsole(pointVector, approxValues, N);
+		ResultToConsole(pointVector, approxValues, N);
 	}
 	//rank != ROOT_PROCESS
 	else
@@ -176,10 +176,10 @@ int main(int argc, char* argv[])
 			{
 				//std::cout << rank << " rank "<< currPointVector[i] << std::endl;
 				approxValues[i] = BesselJ0(currPointVector[i]);
-				std::cout << rank << " rank, approxValue:  "<< approxValues[i] << std::endl;
+				//std::cout << rank << " rank, approxValue:  "<< approxValues[i] << std::endl;
 			}
 			//Отправляем
-			MPI_Gather(approxValues,pointCount,MPI_DOUBLE,0,0,MPI_DOUBLE,MPI_ROOT_PROCESS,MPI_COMM_WORLD);
+			MPI_Gatherv(approxValues,pointCount,MPI_DOUBLE,0,0,0,MPI_DOUBLE,MPI_ROOT_PROCESS,MPI_COMM_WORLD);
 	}
 	MPI_Finalize();
 	return 0;
