@@ -6,7 +6,7 @@
 #include <cstdlib>
 
 #define MPI_ROOT_PROCESS 0		//id главного процесса
-#define A 0 				//начало интервала
+#define A 0				//начало интервала
 #define B 1				//конец интервала
 #define step 0.1			//шаг по х  0.1 0.00001; 
 
@@ -77,8 +77,6 @@ int main(int argc, char* argv[])
 		//Посчитаем число точек для одного процесса
 		int sendCount = (N / procCount) + 0.5; //(+0.5 решает проблему округления до int)
 
-		//std::cout << "N: " << N << std::endl;
-
 		//Вычислим, сколько элементов массива аргументов будет рассчитываться в каждом процессе
 		int *sendArray = new int[procCount];
 		for (int i = 0; i < procCount; i++)
@@ -89,7 +87,6 @@ int main(int argc, char* argv[])
 			{
 				sendArray[i]++;
 			}
-			//std::cout << "sendArray: " << sendArray[i] << std::endl;
 		}
 			
 		//Вычислим отступ от начала массива аргументов для каждого процесса
@@ -100,7 +97,6 @@ int main(int argc, char* argv[])
 		for (int i = 1; i < procCount; i++)
 		{
 			offsetArray[i] = sendArray[i-1] + offsetArray[i-1];
-			//std::cout << "offsetArray: " << offsetArray[i] << std::endl;
 		}
 
 		//Отправляем количество элементов каждому процессу
@@ -108,31 +104,27 @@ int main(int argc, char* argv[])
 		//Отправляем отступ от начала каждому процессу
 		MPI_Scatter(offsetArray,1,MPI_INT,&offsetArray[0],1,MPI_INT,MPI_ROOT_PROCESS,MPI_COMM_WORLD);
 
-		/////////////////Тем временем ROOT PROCESS тоже считает свою часть/////////////////////////////
+		////////Тем временем ROOT PROCESS тоже считает свою часть///////////////////
 		
 		int pointCount = sendArray[0];
 		int offsetVal = offsetArray[0];
 
-		//Массив со всеми точками от offsetVal до offsetVal + pointCount
+		//Массив со всеми точками  от A + offsetVal * step до A + offsetVal * step + step * pointCount
 		double *currPointVector = new double[pointCount];
 		
 		double cv2 = A + offsetVal * step;
-		//std::cout << rank << " rank, CV: " << cv << std::endl;
 		for (int i = 1; i < pointCount + 1; i++)
 		{	
 			currPointVector[i - 1] = cv2;
-			//std::cout << rank << " rank, pv: " << currPointVector[i - 1] << std::endl;
 			cv2 += step;
 		}
 
 		//Считаем функцию
 		for (int i = 0; i < pointCount; i++)
 		{
-			//std::cout << currPointVector[i] << std::endl;
 			approxValues[i + offsetVal] = BesselJ0(currPointVector[i + offsetVal]);
 		}
 		//////////////////////////////////////////////////////
-
 		//Теперь принимаем данные
 		MPI_Gatherv(approxValues,sendArray[0],MPI_DOUBLE,approxValues,sendArray,offsetArray,MPI_DOUBLE,MPI_ROOT_PROCESS,MPI_COMM_WORLD);
 		//Выводим всё в консоль	
@@ -150,33 +142,24 @@ int main(int argc, char* argv[])
 		
 			//Получаем число точек
 			MPI_Scatter(0,0,MPI_DOUBLE,&pointCount,1,MPI_INT,MPI_ROOT_PROCESS,MPI_COMM_WORLD);
-
-			//std::cout << rank << "pcount " << pointCount << std::endl;
 			//Получаем значение отступа
 			MPI_Scatter(0,0,MPI_DOUBLE,&offsetVal,1,MPI_INT,MPI_ROOT_PROCESS,MPI_COMM_WORLD);
-			//std::cout << rank << "offsetVal: " << offsetVal << std::endl;
 
-			//Массив со всеми точками от offsetVal до offsetVal + pointCount
+			//Массив со всеми точками от A + offsetVal * step до A + offsetVal * step + step * pointCount
 			double *currPointVector = new double[pointCount];
 		
 			double cv = A + offsetVal * step;
-			//std::cout << rank << " rank, CV: " << cv << std::endl;
 			for (int i = 1; i < pointCount + 1; i++)
 			{
-				
 				currPointVector[i - 1] = cv;
-				//std::cout << rank << " rank, pv: " << currPointVector[i - 1] << std::endl;
 				cv += step;
-				
 			}
 
 			//Считаем функцию
 			double *approxValues = new double[pointCount];
 			for (int i = 0; i<pointCount; i++)
 			{
-				//std::cout << rank << " rank "<< currPointVector[i] << std::endl;
 				approxValues[i] = BesselJ0(currPointVector[i]);
-				//std::cout << rank << " rank, approxValue:  "<< approxValues[i] << std::endl;
 			}
 			//Отправляем
 			MPI_Gatherv(approxValues,pointCount,MPI_DOUBLE,0,0,0,MPI_DOUBLE,MPI_ROOT_PROCESS,MPI_COMM_WORLD);
