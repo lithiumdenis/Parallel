@@ -1,45 +1,47 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 #include <cuda_runtime.h>
+#include <cuda_profiler_api.h>
 
-float factorial(float f) {
-	if(f == 0)
-		return 1;
-	return (f * factorial(f-1));
-}
-
-float BesselJ0(float x)
+__global__ void besselKernel(const float *X, float *Y, int numElements)
 {
-	float k = 0;
-	float prevSum = 0;
-	float currSum = 0;
-	do
-	{
-		prevSum = currSum;
-		currSum = currSum + (pow(-1.0, k) / (pow(4.0, k) * pow(factorial(k), 2.0))) * pow(x, 2.0 * k);
-		k++;
-	}while(fabs(currSum - prevSum) > 0);
-	return currSum;
-}
-
-__global__ void
-besselKernel(const float *X, float *Y, int numElements)
-{
-    int i = blockDim.x * blockIdx.x + threadIdx.x;
-
-    if (i < numElements)
+    int index = blockDim.x * blockIdx.x + threadIdx.x;
+    if (index < numElements)
     {
-        Y[i] = BesselJ0(X[i]);
+        float k = 0;
+        float prevSum = 0;
+        float currSum = 0;
+        float factCurr = 0;
+
+        do
+        {
+            prevSum = currSum;
+
+            //iterative factorial
+            if(k == 0)
+            {
+                factCurr = 1;
+            }
+            else
+            {
+                factCurr = 1;
+                for (int j = 1; j <= k; j++)
+                {
+                    factCurr *= j;
+                }  
+            }
+            currSum = currSum + (powf(-1.0, k) / (powf(4.0, k) * powf(factCurr, 2.0))) * powf(X[index], 2.0 * k);
+            k++;
+        }while(fabs(currSum - prevSum) > 0);
+        Y[index] = currSum;
     }
 }
 
-int
-main(void)
+int main(void)
 {
     float A = 0; //начало интервала
     float B = 1; //конец интервала
-    float step = 0.1; //шаг по х 0.1 0.00001;
+    float step = 0.00001; //шаг по х 0.1 0.00001;
 
     //Количество точек всего (+0.5 решает проблему округления до int)
     int numElements = ((B-A) / step) + 1 + 0.5;
@@ -72,7 +74,7 @@ main(void)
     //Выделение памяти на девайсе (GPU)
     // Выделение памяти на девайсе для значений X, для кот. вычисляется функция
     float *d_X = NULL;
-    err = cudaMalloc((void **)&d_X, size);
+    cudaError_t err = cudaMalloc((void **)&d_X, size);
     if (err != cudaSuccess)
     {
         fprintf(stderr, "Failed to allocate device vector d_X (error code %s)!\n", cudaGetErrorString(err));
@@ -154,4 +156,5 @@ main(void)
     printf("Execution success\n");
     return 0;
 }
-//nvcc cutey.cu -o -lm cutey.out
+//compile: nvcc cutey.cu -o cutey.out
+//execution: ./cutey.out
