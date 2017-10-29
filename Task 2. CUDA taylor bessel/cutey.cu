@@ -3,15 +3,15 @@
 #include <cuda_runtime.h>
 #include <cuda_profiler_api.h>
 
-__global__ void besselKernel(const float *X, float *Y, int numElements)
+__global__ void besselKernel(const double *X, double *Y, int numElements)
 {
     int index = blockDim.x * blockIdx.x + threadIdx.x;
     if (index < numElements)
     {
-        float k = 0;
-        float prevSum = 0;
-        float currSum = 0;
-        float factCurr = 0;
+        double k = 0;
+        double prevSum = 0;
+        double currSum = 0;
+        double factCurr = 0;
 
         do
         {
@@ -39,21 +39,21 @@ __global__ void besselKernel(const float *X, float *Y, int numElements)
 
 int main(void)
 {
-    float A = 0; //начало интервала
-    float B = 1; //конец интервала
-    float step = 0.00001; //шаг по х 0.1 0.00001;
+    double A = 0; //начало интервала
+    double B = 1; //конец интервала
+    double step = 0.00001; //шаг по х 0.1 0.00001;
 
     //Количество точек всего (+0.5 решает проблему округления до int)
     int numElements = ((B-A) / step) + 1 + 0.5;
 
     printf("numElements = %d\n", numElements);
 
-    size_t size = numElements * sizeof(float);
+    size_t size = numElements * sizeof(double);
     
     // Выделение памяти на хосте для значений X, для кот. вычисляется функция 
-    float *h_X = (float *)malloc(size);
+    double *h_X = (double *)malloc(size);
     // Выделение памяти на хосте для значений Y, т.е. y(x), кот. будут возвращаться
-    float *h_Y = (float *)malloc(size);
+    double *h_Y = (double *)malloc(size);
 
     // Проверка успешности выделения памяти на хосте
     if (h_X == NULL || h_Y == NULL)
@@ -63,7 +63,7 @@ int main(void)
     }
 
     //Инициализация h_X значениями
-    float cv = A;
+    double cv = A;
     for (int i = 0; i < numElements; i++)
     {
         h_X[i] = cv;
@@ -73,7 +73,7 @@ int main(void)
 
     //Выделение памяти на девайсе (GPU)
     // Выделение памяти на девайсе для значений X, для кот. вычисляется функция
-    float *d_X = NULL;
+    double *d_X = NULL;
     cudaError_t err = cudaMalloc((void **)&d_X, size);
     if (err != cudaSuccess)
     {
@@ -81,7 +81,7 @@ int main(void)
         exit(EXIT_FAILURE);
     }
     // Выделение памяти на хосте для значений Y, т.е. y(x), кот. будут возвращаться
-    float *d_Y = NULL;
+    double *d_Y = NULL;
     err = cudaMalloc((void **)&d_Y, size);
     if (err != cudaSuccess)
     {
