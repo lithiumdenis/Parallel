@@ -1,20 +1,16 @@
-//#include <cstdlib>
+#include <cstdlib>
 #include "stdlib.h"
 #include "stdio.h"
 #include "string.h"
 #include "stdbool.h"
 #include <cuda.h>
-//#include "cs43805351.h"
-
-
 #include "lodepng.h"
 
-static const int ThreadsPerBlock = 512;
+#define iters 20
+#define PURPLE 0xFFCC00CC //В rgb фиолетовый 0xCC00CC, а в abgr это
+#define BLACK 0xFF000000
 
-#define SET_PIXEL(x, y) {pixels[(x) + (y) * iw] = lerp(blend1, blend2, (double) i / maxTurns);} 
-
-typedef unsigned char Pixel;
-typedef unsigned char Turn;
+#define ThreadsPerBlock 512
 
 enum TURN
 {
@@ -30,116 +26,32 @@ enum DIRECTION
   D_DOWN
 };
 
-Pixel* buf;
-Turn* turnBuf;
-unsigned BLACK = 0x000000;
-unsigned WHITE = 0xFFFFFF;
-unsigned blend1;
-unsigned blend2;
-bool dense;
-int iters;
-int maxTurns;
-double partial;
-int w;    //image width
-int h;    //image height
-
-int cx;   //center x (axis of rotation)
-int cy;   //center y
-
-unsigned lerp(unsigned c1, unsigned c2, double k)
-{
-  //rgba -> abgr, a omitted from a, b
-  unsigned r = (c1 & 0xFF) * (1 - k) + (c2 & 0xFF) * k;
-  unsigned g = ((c1 & 0xFF00) >> 8) * (1 - k) + ((c2 & 0xFF00) >> 8) * k;
-  unsigned b = ((c1 & 0xFF0000) >> 16) * (1 - k) + ((c2 & 0xFF0000) >> 16) * k;
-  return 0xFF000000 | (b << 16) | (g << 8) | r;
-}
-
 //precondition: turnBuf is populated
-void createImage()
+void createImage(int maxTurns, unsigned char* turnBuf, unsigned* pic, int x, int y, int iw)
 {
-  //filename format: dragonN.png, where N is iteration count
-  //calculate bounding box of resulting image by walking through the turns
-  int x = 0;
-  int y = 0;
-  int minx = 0;
-  int miny = 0;
-  int maxx = 0;
-  int maxy = 0;
   int dir = D_UP;
+
   for(int i = 0; i <= maxTurns; i++)
   {
-    //move in current direction
+    //move in current direction, writing pixels on segment to color
+    pic[x + y * iw] = PURPLE;
     switch(dir)
     {
       case D_LEFT:
-        x--;
+        pic[(x - 1) + y * iw] = PURPLE;
+        x -= (false ? 1 : 2);
         break;
       case D_UP:
-        y--;
+        pic[x + (y - 1) * iw] = PURPLE;
+        y -= (false ? 1 : 2);
         break;
       case D_RIGHT:
-        x++;
+        pic[(x + 1) + y * iw] = PURPLE;
+        x += (false ? 1 : 2);
         break;
       case D_DOWN:
-        y++;
-        break;
-      default:;
-    }
-    //update bounding box if outside
-    minx = x < minx ? x : minx;
-    miny = y < miny ? y : miny;
-    maxx = x > maxx ? x : maxx;
-    maxy = y > maxy ? y : maxy;
-    //turn (except after last position update)
-    if(i != maxTurns)
-    {
-      if(turnBuf[i] == LEFT)
-      {
-        dir = (dir + 1) % 4;
-      }
-      else
-      {
-        dir = (dir + 3) % 4;
-      }
-    }
-  }
-  //using the bounding box, compute final image size
-  //note: in real image, each position update is 2 pixels
-  //also add one pixel border on all 4 edges
-  int iw = (maxx - minx) * (dense ? 1 : 2) + 3;
-  int ih = (maxy - miny) * (dense ? 1 : 2) + 3;
-  //unsigned char* pixels = new unsigned char[iw * ih];     /////////////////////////
-  unsigned* pixels = (unsigned*)malloc(iw * ih * sizeof(unsigned));
-  //fill image with BLACK (most pixels will be in final product)
-  for(int i = 0; i < iw * ih; i++)
-    pixels[i] = (0xFF000000 | BLACK);
-  //set starting point to stay in [0, iw) x [0, ih)
-  x = (-minx) * (dense ? 1 : 2) + 1;
-  y = (-miny) * (dense ? 1 : 2) + 1;
-  dir = D_UP;
-
-  for(int i = 0; i <= maxTurns * partial; i++)
-  {
-    //move in current direction, writing pixels on segment to WHITE
-    SET_PIXEL(x, y);
-    switch(dir)
-    {
-      case D_LEFT:
-        SET_PIXEL(x - 1, y);
-        x -= (dense ? 1 : 2);
-        break;
-      case D_UP:
-        SET_PIXEL(x, y - 1);
-        y -= (dense ? 1 : 2);
-        break;
-      case D_RIGHT:
-        SET_PIXEL(x + 1, y);
-        x += (dense ? 1 : 2);
-        break;
-      case D_DOWN:
-        SET_PIXEL(x, y + 1);
-        y += (dense ? 1 : 2);
+        pic[x + (y + 1) * iw] = PURPLE;
+        y += (false ? 1 : 2);
         break;
       default:;
     }
@@ -157,38 +69,11 @@ void createImage()
     }
     else
     {
-      SET_PIXEL(x, y);
+        pic[x + y * iw] = PURPLE;
     }
   }
-  //get image filename
-  char fname[64];
-  sprintf(fname, "dragon%i.png", iters);
-  lodepng_encode32_file(fname, (unsigned char*) pixels, iw, ih);
-  free(pixels);
+  
 }
-
-//precondition: turnBuf is allocated to exact size required
-void getPath()
-{
-  int numTurns = 0;
-  for(int i = 0; i < iters; i++)
-  {
-    //append RIGHT to the existing sequence
-    turnBuf[numTurns] = RIGHT;
-    //append inverse transpose of first numTurns turns
-    int src = numTurns - 1;
-    int dst = numTurns + 1;
-    while(src >= 0)
-    {
-      turnBuf[dst] = (turnBuf[src] == LEFT) ? RIGHT : LEFT;
-      src--;
-      dst++;
-    }
-    //update numTurns
-    numTurns = numTurns * 2 + 1;
-  }
-}
-
 
 
 
@@ -256,25 +141,106 @@ void FractalKernel(const int width, unsigned char pic[])
 
 int main(int argc, char *argv[])
 {
-    //Разрешение квадратного изображения
-    //int width = 1000;
-    //printf("sex\n");
-    //set default option values
-    iters = 20;
-    dense = false;
-    blend1 = WHITE;
-    blend2 = WHITE;
-    partial = 1.0;
+    //Получение путей
+    int numTurns = 0;
+    int maxTurns = (1 << iters) - 1;
+    unsigned char* turnBuf = (unsigned char*)calloc(maxTurns, sizeof(unsigned char));
+    
+    for(int i = 0; i < iters; i++)
+    {
+      //append RIGHT to the existing sequence
+      turnBuf[numTurns] = RIGHT;
+      //append inverse transpose of first numTurns turns
+      int src = numTurns - 1;
+      int dst = numTurns + 1;
+      while(src >= 0)
+      {
+        turnBuf[dst] = (turnBuf[src] == LEFT) ? RIGHT : LEFT;
+        src--;
+        dst++;
+      }
+      //update numTurns
+      numTurns = numTurns * 2 + 1;
+    }
 
-    //use 1 byte per pixel, 1 = white, 0 = black
-    //allocate initial buffer 
-    w = 1000;
-    h = 1000;
-    maxTurns = (1 << iters) - 1;
-    //turnBuf = new unsigned char[maxTurns];
-    turnBuf = (Turn*)calloc(maxTurns, sizeof(Turn));
-    getPath();
-    createImage();
+    //Вычисление размера выходного изображения путём прохода всех итераций
+    //И получения минимума и максимума того, где они заканчиваются 
+    int x = 0;
+    int y = 0;
+    int minx = 0;
+    int miny = 0;
+    int maxx = 0;
+    int maxy = 0;
+    int dir = D_UP;
+    
+    for(int i = 0; i <= maxTurns; i++)
+    {
+      //move in current direction
+      switch(dir)
+      {
+        case D_LEFT:
+          x--;
+          break;
+        case D_UP:
+          y--;
+          break;
+        case D_RIGHT:
+          x++;
+          break;
+        case D_DOWN:
+          y++;
+          break;
+        default:;
+      }
+      //update bounding box if outside
+      minx = x < minx ? x : minx;
+      miny = y < miny ? y : miny;
+      maxx = x > maxx ? x : maxx;
+      maxy = y > maxy ? y : maxy;
+      //turn (except after last position update)
+      if(i != maxTurns)
+      {
+        if(turnBuf[i] == LEFT)
+        {
+          dir = (dir + 1) % 4;
+        }
+        else
+        {
+          dir = (dir + 3) % 4;
+        }
+      }
+    }
+  
+    //set starting point to stay in [0, iw) x [0, ih)
+    x = (-minx) * (false ? 1 : 2) + 1;
+    y = (-miny) * (false ? 1 : 2) + 1;
+
+    //using the bounding box, compute final image size
+    //note: in real image, each position update is 2 pixels
+    //also add one pixel border on all 4 edges
+    int iw = (maxx - minx) * (false ? 1 : 2) + 3;
+    int ih = (maxy - miny) * (false ? 1 : 2) + 3;
+
+
+    unsigned* pic = (unsigned*)malloc(iw * ih * sizeof(unsigned));
+    //fill image with BLACK (most pixels will be in final product)
+    for(int i = 0; i < iw * ih; i++)
+      pic[i] = BLACK;
+
+
+
+    createImage(maxTurns, turnBuf, pic, x, y, iw);
+
+
+
+    //get image filename
+    char fname[64];
+    sprintf(fname, "dragon.png");
+    lodepng_encode32_file(fname, (unsigned char*) pic, iw, ih);
+    free(pic);
+
+
+
     free(turnBuf);
     return 0;
 
